@@ -12,14 +12,7 @@ from astropy.wcs.wcs import FITSFixedWarning
 from astropy import units
 import ccdproc
 
-#from pipnick.utils.nickel_data import (gain, read_noise, bias_label, 
-#                                       dome_flat_label, sky_flat_label,
-#                                       sky_flat_label_alt,
-#                                       dark_label, focus_label)
-
 from pipnick import cameras
-#from pipnick.utils.nickel_masks import get_masks_from_file
-#from pipnick.utils.dir_nav import organize_files, norm_str
 from pipnick.utils.dir_nav import build_metadata
 from pipnick import logger
 
@@ -72,19 +65,24 @@ def reduce_all(rawdir, rdxdir=None, table=None, save=False, excl_files=None, exc
     logger.info(f'    Output directory: {_rdxdir}')
 
     # Organize raw files based on input directory or table
-    metadata = build_metadata(_rawdir, rdx_table=table)
-    nfiles = len(metadata)
+    metadata = build_metadata(rawdir=_rawdir, filename=table, rdxdir=_rdxdir)
+    if 'rdxdir' in metadata.meta and metadata.meta['rdxdir'] != str(_rdxdir):
+        logger.warning(f"Overwriting output path for reductions.  Changing from "
+                       f"\n\t{metadata.meta['rdxdir']} \n to \n\t{str(_rdxdir)}")
+        metadata.meta['rdxdir'] = str(_rdxdir)
+
+    # TODO: Re-write the file after editing the reduction directory?
 
     # Get the super bias
-    super_bias = get_super_bias(metadata, save_dir=_rdxdir if save else None)
+    super_bias = get_super_bias(metadata, save_dir=metadata.meta['rdxdir'] if save else None)
 
     # Get the super flat.  Try to get sky flats first:
-    super_flat = get_super_flats(metadata, save_dir=_rdxdir if save else None, flattype='skyflat',
-                                 bias=super_bias)
+    super_flat = get_super_flats(metadata, save_dir=metadata.meta['rdxdir'] if save else None,
+                                 flattype='skyflat', bias=super_bias)
 
     # If there were no sky flats, try finding some dome flats
     if super_flat is None:
-        super_flat = get_super_flats(metadata, save_dir=_rdxdir if save else None,
+        super_flat = get_super_flats(metadata, save_dir=metadata.meta['rdxdir'] if save else None,
                                      flattype='domeflat', bias=super_bias)
     if super_flat is None:
         logger.warning('UNABLE TO BUILD FLAT-FIELDS!  Attempting to continue anyway...')
@@ -97,6 +95,7 @@ def reduce_all(rawdir, rdxdir=None, table=None, save=False, excl_files=None, exc
     
     # Perform the basic processing of all science frames
     rdx_file = np.empty(len(metadata), dtype=object)
+    nfiles = len(metadata)
     for i in range(nfiles):
         if not is_science[i]:
             continue
@@ -290,7 +289,7 @@ def get_super_bias(metadata, save_dir=None):
     ----------
     metadata : Table
         Astropy Table containing file information.
-    save_dir : Path or None, optional
+    save_dir : str, Path, optional
         Directory to save the super bias frame.
 
     Returns
@@ -313,7 +312,7 @@ def get_super_bias(metadata, save_dir=None):
         return super_bias
     
     super_bias.header["OBJECT"] = "Bias"
-    ofile = save_dir / 'Bias.fits'
+    ofile = Path(save_dir).absolute() / 'Bias.fits'
     super_bias.write(ofile, overwrite=True)
     logger.info(f"Saved super bias to {ofile}")
 
@@ -327,7 +326,7 @@ def get_super_flats(metadata, save_dir=None, flattype='skyflat', bias=None, filt
     ----------
     metadata : Table
         Astropy Table containing file information.
-    save_dir : Path or None, optional
+    save_dir : str, Path, optional
         Directory to save the super flat frames.
     flattype : str, optional
         Type of flats to use.  Must be 'domeflat' or 'skyflat'.
@@ -343,6 +342,8 @@ def get_super_flats(metadata, save_dir=None, flattype='skyflat', bias=None, filt
     if np.sum(indx) == 0:
         logger.warning(f'No {flattype} frames found!')
         return None
+    
+    _save_dir = None if save_dir is None else Path(save_dir).absolute()
 
     filters = np.unique(metadata['filter'][indx]) if filter is None else filter
 
@@ -358,11 +359,11 @@ def get_super_flats(metadata, save_dir=None, flattype='skyflat', bias=None, filt
         logger.info(f'Processing and combining {np.sum(_indx)} {f} flats')
         frames = [Path(p) / f for p,f in zip(metadata['path'][_indx], metadata['file'][_indx])]
         super_flat[f] = stack_frames(frames, scale=True, bias=bias, flag_cosmics=False)
-        if save_dir is None:
+        if _save_dir is None:
             continue
 
         super_flat[f].header["OBJECT"] = title
-        ofile = save_dir / f'{title}_{f}.fits'
+        ofile = _save_dir / f'{title}_{f}.fits'
         super_flat[f].write(ofile, overwrite=True)
         logger.info(f'Saving {f} super {title} to {ofile}')
 

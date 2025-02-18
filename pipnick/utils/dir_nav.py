@@ -15,8 +15,29 @@ from pipnick import cameras
 from pipnick import logger
 
 
-def build_rdx_table(rawdir, rdx_table=None, ext='.fits', overwrite=False):
+def build_raw_data_table(rawdir, ext='.fits'):
     """
+    Find raw data files in a directory and construct a table with relevant
+    metadata.
+
+    Parameters
+    ----------
+    rawdir : str, Path
+        Path to directory with raw data.
+    ext : str, optional
+        Extension of the files to use in the search string.
+
+    Returns
+    -------
+    type
+        Class type used to parse the metadata.
+    astropy.table.Table
+        Table with the metadata
+
+    Raises
+    ------
+    NotADirectoryError
+        Raised if the provided raw directory does not exist.
     """
     # Check the inputs
     _rawdir = Path(rawdir).absolute()
@@ -31,29 +52,43 @@ def build_rdx_table(rawdir, rdx_table=None, ext='.fits', overwrite=False):
     # Use the first file to identify the camera
     camera = eval(f'cameras.{cameras.identify_camera(files[0])}')
 
-    if rdx_table is None:
-        # Build default file name
-        dtime = datetime.datetime.now(datetime.UTC).isoformat(timespec='seconds')
-        rdx_table = f'{camera.__name__}_{dtime}_rdx.tbl'
-    _rdx_table = Path(rdx_table).absolute()
-    if _rdx_table.is_file() and not overwrite:
-        raise FileExistsError(f'{_rdx_table} already exists.  Set overwrite=True to overwrite.')
-
     # Parse the metadata into a table and write the file
     metadata = [None]*nfiles
     cols = camera.metadata_cols()
     for i,f in enumerate(files):
         metadata[i] = camera.parse_metadata(f)
-    logger.info(f'Saving metadata to {_rdx_table}')
-    metadata = Table(data=np.asarray(metadata), names=cols)
-    metadata.write(_rdx_table, format='ascii.ecsv', overwrite=True)
-    return metadata
+    return camera, Table(data=np.asarray(metadata), names=cols)
 
+#    mode=None, excl_files=None, excl_objs=None, excl_filts=None,
+#    mode : str
+#        Function for which organize_files() is run, & name of new table output
+#        ('reduction', 'astrometry', 'photometry', 'final_calibration')
+#    excl_files : list
+#        List of file stems to exclude (exact match not necessary).
+#    excl_objs : list
+#        List of object strings to exclude (exact match not necessary).
+#    excl_filts : list
+#        List of filter names to exclude (exact match not necessary).
 
-def build_metadata(rawdir, rdx_table=None, mode=None,
-                   excl_files=None, excl_objs=None, excl_filts=None,
-                   ext='.fits', overwrite=False):
+def build_metadata(rawdir=None, filename=None, ext='.fits', overwrite=False, rdxdir=None):
     """
+    Construct a table with metadata needed for the data processing.
+
+    Execution options are:
+
+        - If the metadata has already been constructed and written to a file,
+          simply pass the file to ``filename`` to reload the data.
+
+        - If ``rawdir`` and ``filename`` are both provided, the file provided
+          exists, and overwrite is False, ``rawdir`` will be ignored and the
+          execution is identical to the previous case.
+        
+        - To build the table from scratch, ``rawdir`` must be provided.  If
+          ``filename`` is not provided, a default name is chosen.  If
+          ``filename`` is provide and does not exist, or the file exists and
+          ``overwrite`` is set to true, the provided ``filename`` is used for
+          the output file.
+
     Extract, organize files by metadata, and apply exclusions to
     produce a pandas DataFrame of images to perform functions like
     reduction, astrometry, photometry, and final_calibration on.
@@ -62,38 +97,56 @@ def build_metadata(rawdir, rdx_table=None, mode=None,
 
     Parameters
     ----------
-    datadir : str or Path
-        Path to the directory containing the FITS files to be analyzed.
-    table_path : str or Path, optional
-        Path to a pipnick-specific table file with information about
-        which raw FITS files to process. Must be produced by organize_files()
-    mode : str
-        Function for which organize_files() is run, & name of new table output
-        ('reduction', 'astrometry', 'photometry', 'final_calibration')
-    excl_files : list
-        List of file stems to exclude (exact match not necessary).
-    excl_objs : list
-        List of object strings to exclude (exact match not necessary).
-    excl_filts : list
-        List of filter names to exclude (exact match not necessary).
+    rawdir : str, Path, optional
+        Path to the directory containing the FITS files to be analyzed.  See
+        above for the various execution modes and how this parameter interacts
+        with ``filename`` and ``overwrite``.
+    filename : str, optional
+        The full path (if needed) and file name to either write or load with
+        metadata used during the data processing.  See above for the various
+        execution modes and how this parameter interacts with ``rawdir`` and
+        ``overwrite``. 
+    ext : str, optional
+        Extension of the files to include in the search string used to find
+        files.
+    overwrite : bool, optional
+        Overwrite existing files.
+    rdxdir : str, Path, optional
+        Path to the directory for the reduced data products.  If provided, this
+        is included in the table as a ``meta`` keyword.
 
     Returns
     -------
-    pd.DataFrame
-        DataFrame containing organized file information.
-    """
-    _rdx_table = None if rdx_table is None else Path(rdx_table).absolute()
-    if _rdx_table is None or not _rdx_table.is_file():
-        return build_rdx_table(rawdir, rdx_table=rdx_table, ext=ext, overwrite=overwrite)
-    return Table.read(_rdx_table, format='ascii.ecsv')
+    astropy.table.Table
+        Table containing file metadata.
 
-    # Extract files from an astropy Table file
-    logger.info(f"Files will be extracted from Astropy table file {table_path}, not directory {datadir}")
-    # Convert astropy table to pandas DataFrame
-    file_df = file_table.to_pandas()
-    file_df.insert(1, "files", file_df.paths)
-    file_df.paths = [Path(file_path) for file_path in file_df.paths]
-    logger.info(f"{len(file_df.paths)} files extracted from table file")
+    """
+    _filename = None if filename is None else Path(filename).absolute()
+    if _filename is None or not _filename.is_file() or _filename.is_file() and overwrite:
+        # Construct the metadata table
+        camera, metadata = build_raw_data_table(rawdir, ext=ext)
+        if _filename is None:
+            dtime = datetime.datetime.now(datetime.UTC).isoformat(timespec='seconds')
+            _filename = Path(f'{camera.__name__}_{dtime}_rdx.tbl').absolute()
+        if rdxdir is not None:
+            metadata.meta['rdxdir'] = str(rdxdir)
+        # Write it
+        logger.info(f'Saving metadata to {_filename}')
+        metadata.write(_filename, format='ascii.ecsv', overwrite=True)
+        # Return the table
+        return metadata
+
+    # Read and return the metadata.  This will raise an error if _filename does
+    # not exist
+    return Table.read(_filename, format='ascii.ecsv')
+
+#    # Extract files from an astropy Table file
+#    logger.info(f"Files will be extracted from Astropy table file {table_path}, not directory {datadir}")
+#    # Convert astropy table to pandas DataFrame
+#    file_df = file_table.to_pandas()
+#    file_df.insert(1, "files", file_df.paths)
+#    file_df.paths = [Path(file_path) for file_path in file_df.paths]
+#    logger.info(f"{len(file_df.paths)} files extracted from table file")
 
 #        # Create DataFrame with file metadata
 #        obj_list = []

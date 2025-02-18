@@ -3,8 +3,6 @@ Perform photometric calibration on reduced images
 """
 
 from pipnick.scripts import scriptbase
-from pipnick.utils.log import adjust_global_logger
-import logging
 
 class PhotometryPipeline(scriptbase.ScriptBase):
 
@@ -45,13 +43,13 @@ class PhotometryPipeline(scriptbase.ScriptBase):
     @staticmethod
     def main(args):
         
+        from pipnick.utils.log import adjust_global_logger
         from pipnick.pipelines.photometry import photometry_all
 
         if args.very_verbose:
             args.verbosity = 5
         log_levels = {1:'CRITICAL', 2:'ERROR', 3:'WARNING', 4:'INFO', 5:'DEBUG'}
         adjust_global_logger(log_levels[args.verbosity], __name__)
-        logger = logging.getLogger(__name__)
         
         src_catalogs = photometry_all(args.maindir, use_table=args.use_table,
                                       excl_files=args.excl_files,

@@ -15,15 +15,15 @@ from pipnick import cameras
 from pipnick import logger
 
 
-def build_raw_data_table(rawdir, ext='.fits'):
+def build_obs_table(root, ext='.fits'):
     """
-    Find raw data files in a directory and construct a table with relevant
-    metadata.
+    Find data files in a directory and construct a table with relevant metadata
+    parsed using the relevant :class:`pipnick.cameras.cameras.NickelCamera` class.
 
     Parameters
     ----------
-    rawdir : str, Path
-        Path to directory with raw data.
+    root : str, Path
+        Path to directory with the observed data files.
     ext : str, optional
         Extension of the files to use in the search string.
 
@@ -40,12 +40,12 @@ def build_raw_data_table(rawdir, ext='.fits'):
         Raised if the provided raw directory does not exist.
     """
     # Check the inputs
-    _rawdir = Path(rawdir).absolute()
-    if not _rawdir.is_dir():
-        raise NotADirectoryError(f'{_rawdir} does not exist!')
+    _root = Path(root).absolute()
+    if not _root.is_dir():
+        raise NotADirectoryError(f'{_root} does not exist!')
 
     # Get the list of files
-    files = sorted(_rawdir.glob(f'*{ext}'))
+    files = sorted(_root.glob(f'*{ext}'))
     nfiles = len(files)
     logger.info(f'Found {nfiles} data files.')
 
@@ -117,28 +117,41 @@ def build_metadata(rawdir=None, filename=None, ext='.fits', overwrite=False, rdx
 
     Returns
     -------
+    Path
+        Path to the file with the metadata.
     astropy.table.Table
         Table containing file metadata.
 
     """
+    _rdxdir = None if rdxdir is None else str(Path(rdxdir).absolute())
     _filename = None if filename is None else Path(filename).absolute()
     if _filename is None or not _filename.is_file() or _filename.is_file() and overwrite:
         # Construct the metadata table
-        camera, metadata = build_raw_data_table(rawdir, ext=ext)
+        if rawdir is None:
+            raise ValueError('Must provide a directory with the raw data if a metadata table is '
+                             'not provided, it does not exist, or you wish to overwrite the file.')
+        camera, metadata = build_obs_table(rawdir, ext=ext)
         if _filename is None:
-            dtime = datetime.datetime.now(datetime.UTC).isoformat(timespec='seconds')
+            dtime = datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%S')
             _filename = Path(f'{camera.__name__}_{dtime}_rdx.tbl').absolute()
-        if rdxdir is not None:
-            metadata.meta['rdxdir'] = str(rdxdir)
+        if _rdxdir is not None:
+            metadata.meta['rdxdir'] = _rdxdir
         # Write it
         logger.info(f'Saving metadata to {_filename}')
         metadata.write(_filename, format='ascii.ecsv', overwrite=True)
         # Return the table
-        return metadata
+        return _filename, metadata
 
     # Read and return the metadata.  This will raise an error if _filename does
     # not exist
-    return Table.read(_filename, format='ascii.ecsv')
+    logger.info(f'Loading metadata from {_filename}')
+    metadata = Table.read(_filename, format='ascii.ecsv')
+    if 'rdxdir' in metadata.meta and _rdxdir is not None and metadata.meta['rdxdir'] != _rdxdir:
+        logger.warning(f"Overwriting output path for reductions.  Changing from "
+                       f"\n\t{metadata.meta['rdxdir']} \n to \n\t{_rdxdir}")
+        metadata.meta['rdxdir'] = _rdxdir
+        metadata.write(_filename, format='ascii.ecsv', overwrite=True)
+    return _filename, metadata
 
 #    # Extract files from an astropy Table file
 #    logger.info(f"Files will be extracted from Astropy table file {table_path}, not directory {datadir}")

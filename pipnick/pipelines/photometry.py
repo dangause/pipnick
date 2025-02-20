@@ -1,17 +1,15 @@
 from pathlib import Path
-import logging
 
 from pipnick.photometry.psf_photometry import psf_analysis, consolidate_groups
 from pipnick.photometry.aperture_photometry import aperture_analysis
 from pipnick.utils.dir_nav import organize_files
+from pipnick import logger
 
-logger = logging.getLogger(__name__)
 
-
-def photometry_all(maindir, use_table=False,
-                   excl_files=[], excl_objs=[], excl_filts=[],
+def photometry_all(rdxdir=None, raw_table=None, phot_table=None,
+#                   excl_files=[], excl_objs=[], excl_filts=[],
                    thresh=8.0, group=False, mode='all',
-                   fittype='circ', plot_final=False, plot_inters=False):
+                   fittype='circ'): #, plot_final=False, plot_inters=False):
     r"""
     Perform photometric analysis on reduced files in a specified directory.
 

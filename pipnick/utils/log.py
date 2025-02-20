@@ -1,21 +1,8 @@
 import pkg_resources
 import json
 import logging
+import numpy as np
 
-
-#def load_logging_config():
-#    """
-#    Loads a logging configuration from a JSON file within the package.
-#
-#    Returns
-#    -------
-#    dict
-#        The logging configuration loaded from the JSON file.
-#    """
-#    # Load the JSON configuration from a file within the 'pipnick.utils' package
-#    with pkg_resources.resource_stream('pipnick.utils', 'logging_config.json') as f:
-#        config = json.load(f)
-#    return config
 
 def adjust_global_logger(log_level='INFO', name='all_others'):
     """
@@ -23,26 +10,31 @@ def adjust_global_logger(log_level='INFO', name='all_others'):
 
     Parameters
     ----------
-    log_level : str, optional
-        The logging level to set for the console handler (default is 'INFO').
+    log_level : int, str, optional
+        String or integer representation of logging level to set for the console
+        handler (default is 'INFO').  Integer mapping is: 1='CRITICAL',
+        2='ERROR', 3='WARNING', 4='INFO', 5='DEBUG'.
     name : str, optional
         The base name for the log file (default is 'all_others').
-
-    Returns
-    -------
-    None
     """
+    if isinstance(log_level, str):
+        _log_level = log_level 
+    else:
+        log_levels = {1:'CRITICAL', 2:'ERROR', 3:'WARNING', 4:'INFO', 5:'DEBUG'}
+        _log_level = log_levels[np.clip(log_level, 1, 5)]
+
     # Load the JSON configuration for logging
-    output_file = f"log_{name.split('.')[-1]}.log"
+    output_file = f"{name.split('.')[-1]}.log"
     
     # Adjust the configuration for the file name and log level
     with pkg_resources.resource_stream('pipnick.utils', 'logging_config.json') as f:
         config = json.load(f)
     config['handlers']['file']['filename'] = output_file
-    config['handlers']['console']['level'] = log_level
+    config['handlers']['console']['level'] = _log_level
 
     # Configure logging with the loaded configuration
     logging.config.dictConfig(config)
+
 
 def log_astropy_table(table):
     """

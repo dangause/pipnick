@@ -15,7 +15,7 @@ from pipnick import cameras
 from pipnick import logger
 
 
-def build_obs_table(root, ext='.fits'):
+def build_camera_datatable(root, ext='.fits'):
     """
     Find data files in a directory and construct a table with relevant metadata
     parsed using the relevant :class:`pipnick.cameras.cameras.NickelCamera` class.
@@ -89,12 +89,6 @@ def build_metadata(rawdir=None, filename=None, ext='.fits', overwrite=False, rdx
           ``overwrite`` is set to true, the provided ``filename`` is used for
           the output file.
 
-    Extract, organize files by metadata, and apply exclusions to
-    produce a pandas DataFrame of images to perform functions like
-    reduction, astrometry, photometry, and final_calibration on.
-    Saves information to or draws information from a table file, and 
-    comments out files to be excluded.
-
     Parameters
     ----------
     rawdir : str, Path, optional
@@ -130,7 +124,7 @@ def build_metadata(rawdir=None, filename=None, ext='.fits', overwrite=False, rdx
         if rawdir is None:
             raise ValueError('Must provide a directory with the raw data if a metadata table is '
                              'not provided, it does not exist, or you wish to overwrite the file.')
-        camera, metadata = build_obs_table(rawdir, ext=ext)
+        camera, metadata = build_camera_datatable(rawdir, ext=ext)
         if _filename is None:
             dtime = datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%S')
             _filename = Path(f'{camera.__name__}_{dtime}_rdx.tbl').absolute()

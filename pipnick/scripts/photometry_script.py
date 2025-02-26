@@ -71,7 +71,7 @@ class PhotometryPipeline(scriptbase.ScriptBase):
 #                                      excl_files=args.excl_files,
 #                                      excl_objs=args.excl_objs, 
 #                                      excl_filts=args.excl_filts, 
-                                      thresh=args.thresh, group=args.group, 
+                                      thresh=args.sigma_thresh, group=args.group, 
                                       mode=args.mode, fittype=args.fittype)
                                      #, plot_final=args.plot_final, plot_inters=args.plot_inters)
         

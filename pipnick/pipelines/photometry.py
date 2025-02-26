@@ -1,8 +1,10 @@
 from pathlib import Path
 
+from IPython import embed
+
 from pipnick.photometry.psf_photometry import psf_analysis, consolidate_groups
 from pipnick.photometry.aperture_photometry import aperture_analysis
-from pipnick.utils.dir_nav import organize_files
+from pipnick.utils.dir_nav import build_camera_table
 from pipnick import logger
 
 

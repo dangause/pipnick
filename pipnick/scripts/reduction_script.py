@@ -34,6 +34,13 @@ class ReductionPipeline(scriptbase.ScriptBase):
 #        parser.add_argument('-d', '--display', action='store_true', help="Display reduced images")
         parser.add_argument('--verbose', '-v', action='count', default=0,
                             help='Level of verbosity to display (5=highest; "-vv" sets level=2)')
+        parser.add_argument('--overwrite', '-o', default=False, action='store_true',
+                            help='Overwrite any existing files')
+        parser.add_argument('--append', '-a', default=False, action='store_true',
+                            help='Append new files to existing reduction.  This only appends new '
+                                 'science observations!  New calibration frames are ignored, '
+                                 'unless overwrite is set, which is identical to re-running the '
+                                 'entire reduction again from scratch.')
         return parser
 
     @staticmethod
@@ -46,7 +53,8 @@ class ReductionPipeline(scriptbase.ScriptBase):
         adjust_global_logger(log_level='INFO' if args.verbose < 1 else args.verbose, name=__name__)
 
         # Reduce the images
-        metadata = reduce_all(rawdir=args.rawdir, table=args.raw_table, rdxdir=args.rdxdir)
+        metadata = reduce_all(rawdir=args.rawdir, table=args.raw_table, rdxdir=args.rdxdir,
+                              overwrite=args.overwrite, append=args.append)
                               #save=args.save,
                               #excl_files=args.excl_files, excl_objs=args.excl_objs, 
                               #excl_filts=args.excl_filts)

@@ -15,7 +15,7 @@ from pipnick import cameras
 from pipnick import logger
 
 
-def build_camera_datatable(root, ext='.fits'):
+def build_camera_datatable(root, ext='.fits', path_key='path'):
     """
     Find data files in a directory and construct a table with relevant metadata
     parsed using the relevant :class:`pipnick.cameras.cameras.NickelCamera` class.
@@ -57,7 +57,9 @@ def build_camera_datatable(root, ext='.fits'):
     cols = camera.metadata_cols()
     for i,f in enumerate(files):
         metadata[i] = camera.parse_metadata(f)
-    return camera, Table(data=np.asarray(metadata), names=cols)
+    tbl = Table(data=np.asarray(metadata), names=cols)
+    tbl.meta[path_key] = str(_root)
+    return camera, tbl
 
 #    mode=None, excl_files=None, excl_objs=None, excl_filts=None,
 #    mode : str
@@ -70,7 +72,8 @@ def build_camera_datatable(root, ext='.fits'):
 #    excl_filts : list
 #        List of filter names to exclude (exact match not necessary).
 
-def build_metadata(rawdir=None, filename=None, ext='.fits', overwrite=False, rdxdir=None):
+def build_metadata(rawdir=None, filename=None, ext='.fits', overwrite=False, append=False,
+                   rdxdir=None):
     """
     Construct a table with metadata needed for the data processing.
 
@@ -124,7 +127,7 @@ def build_metadata(rawdir=None, filename=None, ext='.fits', overwrite=False, rdx
         if rawdir is None:
             raise ValueError('Must provide a directory with the raw data if a metadata table is '
                              'not provided, it does not exist, or you wish to overwrite the file.')
-        camera, metadata = build_camera_datatable(rawdir, ext=ext)
+        camera, metadata = build_camera_datatable(rawdir, ext=ext, path_key='rawdir')
         if _filename is None:
             dtime = datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%S')
             _filename = Path(f'{camera.__name__}_{dtime}_rdx.tbl').absolute()
@@ -202,6 +205,33 @@ def build_metadata(rawdir=None, filename=None, ext='.fits', overwrite=False, rdx
 #    
 #    # Return
 #    return file_df
+
+
+def frame_path(metadata, select=None, path_key='rawdir'):
+    """
+    Construct a set of file paths for rows in the provided metadata table.
+
+    Parameters
+    ----------
+    metadata : astropy.table.Table
+        Table with the fits file metadata
+    select : numpy.ndarray, optional
+        A boolean or integer vector selecting the rows of the table to use.  If
+        None, all rows are used.
+    path_key : str, optional
+        The keyword in the table ``meta`` dictionary with the root path of each
+        file.  Cannot be None, and must be in the ``meta`` dictionary of the
+        provided table.
+
+    Returns
+    -------
+    list
+        A list of Path objects with the full path to each file.
+    """
+    if path_key not in metadata.meta:
+        raise ValueError(f'Provided table does not include {path_key} in its metadata dictionary.')
+    files = metadata['file'] if select is None else metadata['file'][select]
+    return [Path(metadata.meta[path_key]).absolute() / f for f in files]
 
 
 def comment_out_rows(excluded_file_names, table_file, modify=True):

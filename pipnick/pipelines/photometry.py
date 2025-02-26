@@ -4,14 +4,14 @@ from IPython import embed
 
 from pipnick.photometry.psf_photometry import psf_analysis, consolidate_groups
 from pipnick.photometry.aperture_photometry import aperture_analysis
-from pipnick.utils.dir_nav import build_camera_table
+from pipnick.utils.dir_nav import build_camera_datatable
 from pipnick import logger
 
 
 def photometry_all(rdxdir=None, raw_table=None, phot_table=None,
 #                   excl_files=[], excl_objs=[], excl_filts=[],
                    thresh=8.0, group=False, mode='all',
-                   fittype='circ'): #, plot_final=False, plot_inters=False):
+                   fittype='circ', overwrite=False): #, plot_final=False, plot_inters=False):
     r"""
     Perform photometric analysis on reduced files in a specified directory.
 
@@ -66,6 +66,21 @@ def photometry_all(rdxdir=None, raw_table=None, phot_table=None,
         A list of file paths to the generated source catalogs (in CSV format).
         Each entry corresponds to an analyzed image file.
     """
+#    if rdxdir is None and raw_table is None and phot_table is None:
+#        raise ValueError('Must provide the reduction directory, the raw data table, or the '
+#                         'photometry data table.')
+#    if phot_table is not None:
+#        _phot_table = Path(phot_table).absolute()
+#        if _phot_table.is_file() and not overwrite:
+#            raise ValueError(f'{_phot_table} exists and overwrite=False!')
+#    if rdxdir is not None:
+#        phot = build_camera_datatable(rdxdir, ext='_rdx.fits')
+#    elif raw_table is not None:
+#        phot = Table.read(raw_table)
+#    else
+#    embed()
+#    exit()
+
     logger.info(f'---- photometry_all() called on main directory {maindir}')
     
     # Set the output directory based on whether grouping is enabled

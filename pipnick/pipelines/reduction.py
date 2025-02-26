@@ -13,11 +13,11 @@ from astropy import units
 import ccdproc
 
 from pipnick import cameras
-from pipnick.utils.dir_nav import build_metadata
+from pipnick.utils import dir_nav
 from pipnick import logger
 
 
-def reduce_all(rawdir=None, table=None, rdxdir=None, overwrite=False):
+def reduce_all(rawdir=None, table=None, rdxdir=None, overwrite=False, append=False):
 #    , save=False, excl_files=None, excl_objs=None,
 #               excl_filts=None):
 #    save : bool, optional
@@ -48,6 +48,14 @@ def reduce_all(rawdir=None, table=None, rdxdir=None, overwrite=False):
         ``/User/janedoe/Nickel/``.
     overwrite : bool, optional
         Overwrite any existing files.
+    append : bool, optional
+        If the data-reduction table already exists, add any new science frames
+        found in the raw data directory to the provided table.  In effect, this
+        simply overwrites the existing ``table`` with a new listing of files in
+        ``rawdir``.  The difference with ``overwrite`` is that the *products* of
+        the reduction are *not* overwritten.  This means that new raw
+        calibration frames are ignored.  To incorporate new calibration files in
+        the reduction, you should set ``overwrite=True``.
 
     Returns
     -------
@@ -55,13 +63,14 @@ def reduce_all(rawdir=None, table=None, rdxdir=None, overwrite=False):
         Paths to the reduced images written to disk.
     """
     # Organize raw files based on input directory or table
-    metafile, metadata = build_metadata(rawdir=rawdir, filename=table, rdxdir=rdxdir)
+    metafile, metadata = dir_nav.build_metadata(rawdir=rawdir, filename=table,
+                                                overwrite=overwrite or append, rdxdir=rdxdir)
 
     # Get the output directory
     if 'rdxdir' in metadata.meta:
         _rdxdir = Path(metadata.meta['rdxdir'])
     else:
-        _rdxdir = Path(metadata['path'][0]).absolute().parent
+        _rdxdir = Path(metadata.meta['rawdir']).absolute().parent
         metadata.meta['rdxdir'] = str(_rdxdir)
         # Overwrite the file to include the reduction directory
         metadata.write(metafile, format='ascii.ecsv', overwrite=True)
@@ -97,6 +106,7 @@ def reduce_all(rawdir=None, table=None, rdxdir=None, overwrite=False):
     
     # Perform the basic processing of all science frames
     rdx_file = np.empty(len(metadata), dtype=object)
+    frame = dir_nav.frame_path(metadata, path_key='rawdir')
     nfiles = len(metadata)
     for i in range(nfiles):
         if not is_science[i]:
@@ -108,13 +118,12 @@ def reduce_all(rawdir=None, table=None, rdxdir=None, overwrite=False):
             flat = super_flat[metadata['filter'][i]]
 
         # Trim and overscan correct it
-        raw_file = Path(metadata['path'][i]).absolute() / metadata['file'][i]
-        rdx_file[i] = _rdxdir / f'{raw_file.stem}_rdx.fits'
+        rdx_file[i] = _rdxdir / f'{frame[i].stem}_rdx.fits'
         if rdx_file[i].is_file() and not overwrite:
             logger.info(f'{rdx_file[i]} exists and overwrite is False.  Continuing...')
             continue
 
-        rdx_frame = process_frame(raw_file, flag_cosmics=True, bias=super_bias, flat=flat)
+        rdx_frame = process_frame(frame[i], flag_cosmics=True, bias=super_bias, flat=flat)
         rdx_frame.write(rdx_file[i], overwrite=True)
         logger.info(f'Saved processed frame to {rdx_file[i]}')
 
@@ -320,7 +329,7 @@ def get_super_bias(metadata, save_dir=None, overwrite=False):
 
     logger.info(f'Found {nbias} bias frames to process and combine.')
 
-    frames = [Path(p) / f for p,f in zip(metadata['path'][indx], metadata['file'][indx])]
+    frames = dir_nav.frame_path(metadata, select=indx, path_key='rawdir')
     super_bias = stack_frames(frames, flag_cosmics=False)
 
     if save_dir is None:
@@ -385,7 +394,7 @@ def get_super_flats(metadata, save_dir=None, flattype='skyflat', bias=None, filt
                 continue
     
         logger.info(f'Processing and combining {np.sum(_indx)} {f} flats')
-        frames = [Path(p) / f for p,f in zip(metadata['path'][_indx], metadata['file'][_indx])]
+        frames = dir_nav.frame_path(metadata, select=_indx, path_key='rawdir')
         super_flat[f] = stack_frames(frames, scale=True, bias=bias, flag_cosmics=False)
         if _save_dir is None:
             continue

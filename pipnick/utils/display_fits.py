@@ -6,6 +6,7 @@ from typing import Union
 from astropy.io import fits
 from astropy.visualization import ZScaleInterval
 
+from pipnick.pipelines.reduction import init_ccddata
 from pipnick.utils.fits_class import Fits_Simple
 from pipnick.utils.dir_nav import unzip_directories
 
@@ -57,7 +58,8 @@ def display_nickel(image: Union[str, Path, Fits_Simple]):
     ax.imshow(data_masked, origin='lower', cmap=cmap, vmin=vmin, vmax=vmax)
     plt.colorbar(cm.ScalarMappable(cmap=cmap), ax=ax)
     plt.show()
-   
+
+
 def display_many_nickel(path_list):
     """
     Display the data of all images in a list of directories or files.
@@ -70,3 +72,138 @@ def display_many_nickel(path_list):
     images = unzip_directories(path_list, output_format='Fits_Simple')
     for image in images:
         display_nickel(image)
+
+
+def fits_plot(ccd, title='FITS Plot', 
+              xlabel='Pixel X', ylabel='Pixel Y', cmap='gray', cbar_label='Counts (electrons)',
+              vmin=1, vmax=99.75, figsize=(10, 10), mask_highlight=False):
+    """
+    Plots a FITS image using percentile scaling for contrast adjustment.
+    Optionally, masked pixels (if available in ccd.mask) are highlighted in red.
+
+    Parameters:
+        ccd (object): An object containing the FITS image data (ccd.data) and an optional mask (ccd.mask).
+        title (str): The title of the plot.
+        xlabel (str): Label for the x-axis.
+        ylabel (str): Label for the y-axis.
+        cmap (str): Colormap used in the plot.
+        cbar_label (str): Label for the colorbar.
+        vmin (float): Lower percentile for contrast scaling.
+        vmax (float): Upper percentile for contrast scaling.
+        figsize (tuple): Figure size in inches.
+        mask_highlight (bool): If True, highlights masked pixels in red. Default is False.
+    """
+    data = ccd.data
+    # Calculate display range using percentiles.
+    lower = np.percentile(data, vmin)
+    upper = np.percentile(data, vmax)
+    
+    # Create the figure.
+    plt.figure(figsize=figsize)
+    # Store the image mappable.
+    im = plt.imshow(data, cmap=cmap, origin='lower', vmin=lower, vmax=upper)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    
+    # Overlay red markers for masked pixels if mask_highlight is True.
+    if mask_highlight and hasattr(ccd, 'mask') and ccd.mask is not None:
+        masked_y, masked_x = np.where(ccd.mask)
+        plt.scatter(masked_x, masked_y, s=10, facecolors='none', edgecolors='red', linewidths=0.5)
+    
+    # Create and label the colorbar explicitly using the image mappable.
+    cbar = plt.colorbar(im, shrink=0.8)
+    cbar.set_label(cbar_label)
+    plt.show()
+
+
+def get_array(data):
+    """
+    Returns the underlying NumPy array.
+    
+    If 'data' is a file path (str or Path), it is assumed to be a FITS file and is
+    initialized using init_ccddata, then the underlying data array is returned.
+    
+    If 'data' is a CCDData object (or similar) with a .data attribute, returns that.
+    Otherwise, assumes data is already a NumPy array.
+    """
+    if isinstance(data, (str, Path)):
+        # If the input is a file path, initialize the CCDData using init_ccddata.
+        data = init_ccddata(data)
+    return data.data if hasattr(data, 'data') else data
+
+
+def fits_plot_multi(data_list, titles=None,
+                    xlabel='Pixel X', ylabel='Pixel Y',
+                    cmap='gray', cbar_label='Counts (electrons)',
+                    vmin=1, vmax=99.75, ncols=2, figsize=(15, 10),
+                    share_axes=True, share_vminmax=False,
+                    subplot_dims=None):
+    """
+    Plots multiple FITS images in a grid of subplots using percentile scaling for contrast adjustment.
+    Each subplot is given its own colorbar, shrunk so it isn't too tall.
+    
+    Parameters:
+        data_list (list): List of 2D arrays, CCDData objects, or FITS file paths.
+        titles (list, optional): Titles for each subplot. Defaults to 'FITS Plot' if not provided.
+        xlabel (str): Label for the x-axis.
+        ylabel (str): Label for the y-axis.
+        cmap (str): Colormap for the images.
+        cbar_label (str): Label for the colorbar.
+        vmin (float): Lower percentile for contrast scaling.
+        vmax (float): Upper percentile for contrast scaling.
+        ncols (int): Number of columns in the subplot grid (if subplot_dims not provided).
+        figsize (tuple): Size of the entire figure.
+        share_axes (bool): If True, subplots share the same x and y axes.
+        share_vminmax (bool): If True, compute a global vmin/vmax across all images.
+        subplot_dims (list, optional): A two-element list [nrows, ncols] to explicitly set the grid dimensions.
+    """
+    n_images = len(data_list)
+    
+    # Determine subplot dimensions.
+    if subplot_dims is not None:
+        nrows, ncols = subplot_dims
+    else:
+        nrows = int(np.ceil(n_images / ncols))
+    
+    # Create subplots with optional shared axes.
+    fig, axs = plt.subplots(nrows, ncols, figsize=figsize,
+                            sharex=share_axes, sharey=share_axes)
+    if n_images == 1:
+        axs = [axs]
+    else:
+        axs = np.array(axs).flatten()
+    
+    # If sharing vmin/vmax, compute global values across all data.
+    if share_vminmax:
+        all_data = np.concatenate([get_array(d).flatten() for d in data_list])
+        global_lower = np.percentile(all_data, vmin)
+        global_upper = np.percentile(all_data, vmax)
+    
+    # Loop through the datasets and plot each one.
+    for i, data in enumerate(data_list):
+        arr = get_array(data)
+        if share_vminmax:
+            lower, upper = global_lower, global_upper
+        else:
+            lower = np.percentile(arr, vmin)
+            upper = np.percentile(arr, vmax)
+        
+        im = axs[i].imshow(arr, cmap=cmap, origin='lower', vmin=lower, vmax=upper)
+        axs[i].set_xlabel(xlabel)
+        axs[i].set_ylabel(ylabel)
+        if titles is not None and i < len(titles):
+            axs[i].set_title(titles[i])
+        else:
+            axs[i].set_title('FITS Plot')
+        
+        # Add a colorbar for each subplot, shrunk so it doesn't extend too tall.
+        cbar = fig.colorbar(im, ax=axs[i], shrink=0.6)
+        cbar.set_label(cbar_label)
+    
+    # Remove any unused subplots.
+    for j in range(i + 1, len(axs)):
+        fig.delaxes(axs[j])
+    
+    plt.tight_layout()
+    plt.show()

@@ -173,3 +173,6 @@ testing
 *.log.2
 *proc_files
 *.tbl
+
+*/data/
+*.DS_Store

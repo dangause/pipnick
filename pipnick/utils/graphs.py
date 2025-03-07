@@ -232,3 +232,90 @@ def plot_sources(phot_data, given_fwhm, image=None, flux_name='flux_fit',
     # Show plot
     plt.gcf().set_dpi(300)
     plt.show()
+
+
+def plot_overscan(
+    ccd_list,
+    labels=None,
+    overscan_start=2040,
+    overscan_end=2100,
+    pre_overscan_columns=10,
+    figsize=(8, 5),
+    ymin=None,
+    ymax=None
+):
+    """
+    Plots the overscan region, averaged over all rows, for multiple CCD images,
+    including n columns before the start of overscan.
+
+    Parameters
+    ----------
+    ccd_list : list
+        A list of CCDData objects or 2D numpy arrays containing image data.
+    labels : list of str, optional
+        Labels for each CCD in the plot legend. Must be the same length as ccd_list.
+        If None, default labels are used.
+    overscan_start : int, optional
+        The first column (pixel index) of the overscan region.
+    overscan_end : int, optional
+        The last column (pixel index) of the overscan region (non-inclusive).
+    pre_overscan_columns : int, optional
+        Number of columns to include before the start of the overscan region.
+    figsize : tuple, optional
+        Size of the figure in inches.
+    ymin : float, optional
+        Lower limit for the y-axis. If None, auto-scaling is used.
+    ymax : float, optional
+        Upper limit for the y-axis. If None, auto-scaling is used.
+    """
+    # If no labels are provided, generate default ones.
+    if labels is None:
+        labels = [f"CCD {i+1}" for i in range(len(ccd_list))]
+
+    # Create the figure.
+    plt.figure(figsize=figsize)
+
+    for ccd, label in zip(ccd_list, labels):
+        # Extract the .data attribute if it's a CCDData object; otherwise assume it's a numpy array.
+        data = ccd.data if hasattr(ccd, "data") else ccd
+        
+        # Determine the valid range for columns in the image.
+        nrows, ncols = data.shape
+        
+        # Define a start index that includes 'pre_overscan_columns' before overscan_start.
+        pre_region_start = max(0, overscan_start - pre_overscan_columns)
+        
+        # Ensure overscan_end doesn't exceed the image width.
+        overscan_end_clamped = min(overscan_end, ncols)
+        
+        # If there's no overlap, raise an error.
+        if pre_region_start >= ncols or pre_region_start >= overscan_end_clamped:
+            raise ValueError(
+                f"Invalid overscan indices: pre_region_start={pre_region_start}, "
+                f"overscan_end={overscan_end_clamped}, image width={ncols}."
+            )
+        
+        # Average over all rows in the combined region.
+        region_profile = np.mean(data[:, pre_region_start:overscan_end_clamped], axis=0)
+        
+        # Create an array of column indices for the x-axis.
+        columns = np.arange(pre_region_start, overscan_end_clamped)
+        
+        # Plot the averaged profile.
+        plt.plot(columns, region_profile, label=label)
+
+    # Add a vertical line to indicate the start of the overscan region.
+    plt.axvline(overscan_start, color='k', linestyle='--', label='start of overscan')
+
+    # Customize the plot.
+    plt.xlabel('pixel number')
+    plt.ylabel('Counts')
+    plt.title('Overscan region, averaged over all rows (with pre-overscan columns)')
+    plt.legend()
+    plt.grid(True)
+    
+    # If y-limits are provided, apply them.
+    if ymin is not None or ymax is not None:
+        plt.ylim(ymin, ymax)
+    
+    plt.show()

@@ -4,11 +4,11 @@ from IPython import embed
 
 from pipnick.photometry.psf_photometry import psf_analysis, consolidate_groups
 from pipnick.photometry.aperture_photometry import aperture_analysis
-from pipnick.utils.dir_nav import build_camera_datatable
+from pipnick.utils.dir_nav import build_camera_datatable, build_metadata
 from pipnick import logger
 
 
-def photometry_all(rdxdir=None, raw_table=None, phot_table=None,
+def photometry_all(maindir=None, raw_table=None, phot_table=None,
 #                   excl_files=[], excl_objs=[], excl_filts=[],
                    thresh=8.0, group=False, mode='all',
                    fittype='circ', overwrite=False): #, plot_final=False, plot_inters=False):

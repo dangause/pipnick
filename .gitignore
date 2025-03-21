@@ -177,3 +177,4 @@ testing
 */data/
 *.DS_Store
 hidden_notebooks/
+pipnick.code-workspace
